@@ -49,7 +49,7 @@ async function scanWorkspace() {
 
   const allJsxFiles = await vscode.workspace.findFiles(
     "**/*.{js,jsx,ts,tsx}",
-    "{**/node_modules/**,**/.next/**}"
+    "{**/node_modules/**,**/.next/**,**/out/**,**/dist/**}"
   );
   console.log(`Found ${allJsxFiles.length} files to scan.`);
 
@@ -368,7 +368,11 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("next-client.enable", () => {
       isEnabled = true;
       context.globalState.update("nextClient.isEnabled", isEnabled);
-      vscode.commands.executeCommand("setContext", "nextClient.enabled", isEnabled);
+      vscode.commands.executeCommand(
+        "setContext",
+        "nextClient.enabled",
+        isEnabled
+      );
       vscode.window.visibleTextEditors.forEach(updateDecorations);
       console.log("Next Client extension enabled.");
     })
@@ -378,7 +382,11 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("next-client.disable", () => {
       isEnabled = false;
       context.globalState.update("nextClient.isEnabled", isEnabled);
-      vscode.commands.executeCommand("setContext", "nextClient.enabled", isEnabled);
+      vscode.commands.executeCommand(
+        "setContext",
+        "nextClient.enabled",
+        isEnabled
+      );
       clearAllDecorations();
       console.log("Next Client extension disabled.");
     })

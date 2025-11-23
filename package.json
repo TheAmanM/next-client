@@ -50,9 +50,11 @@
     "lint": "eslint src",
     "test": "vscode-test"
   },
-  "devDependencies": {
+  "dependencies": {
     "@babel/parser": "^7.28.5",
-    "@babel/traverse": "^7.28.5",
+    "@babel/traverse": "^7.28.5"
+  },
+  "devDependencies": {
     "@types/babel__parser": "^7.0.0",
     "@types/babel__traverse": "^7.28.0",
     "@types/mocha": "^10.0.10",

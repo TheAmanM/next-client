@@ -12,8 +12,15 @@ interface ModuleInfo {
 
 const moduleGraph = new Map<string, ModuleInfo>();
 let isReady = false;
+let isEnabled = true;
 
 let clientComponentDecorationType: vscode.TextEditorDecorationType;
+
+function clearAllDecorations() {
+  vscode.window.visibleTextEditors.forEach((editor) => {
+    editor.setDecorations(clientComponentDecorationType, []);
+  });
+}
 
 function refreshDecorationStyle() {
   if (clientComponentDecorationType) {
@@ -207,6 +214,12 @@ async function updateDecorations(editor: vscode.TextEditor | undefined) {
   if (!editor || !isReady) {
     return;
   }
+
+  if (!isEnabled) {
+    editor.setDecorations(clientComponentDecorationType, []);
+    return;
+  }
+
   const currentFilePath = editor.document.uri.fsPath;
   const decorations: vscode.DecorationOptions[] = [];
   const fileContent = editor.document.getText();
@@ -346,6 +359,31 @@ async function updateDecorations(editor: vscode.TextEditor | undefined) {
 export function activate(context: vscode.ExtensionContext) {
   console.log('Congratulations, your extension "client-js" is now active!');
 
+  // Load the persisted state, defaulting to true (enabled)
+  isEnabled = context.globalState.get<boolean>("nextClient.isEnabled", true);
+
+  vscode.commands.executeCommand("setContext", "nextClient.enabled", isEnabled);
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("next-client.enable", () => {
+      isEnabled = true;
+      context.globalState.update("nextClient.isEnabled", isEnabled);
+      vscode.commands.executeCommand("setContext", "nextClient.enabled", isEnabled);
+      vscode.window.visibleTextEditors.forEach(updateDecorations);
+      console.log("Next Client extension enabled.");
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("next-client.disable", () => {
+      isEnabled = false;
+      context.globalState.update("nextClient.isEnabled", isEnabled);
+      vscode.commands.executeCommand("setContext", "nextClient.enabled", isEnabled);
+      clearAllDecorations();
+      console.log("Next Client extension disabled.");
+    })
+  );
+
   refreshDecorationStyle();
 
   context.subscriptions.push(
@@ -353,7 +391,9 @@ export function activate(context: vscode.ExtensionContext) {
       if (e.affectsConfiguration("nextClient.styling")) {
         console.log("Styling configuration changed. Re-applying decorations.");
         refreshDecorationStyle();
-        vscode.window.visibleTextEditors.forEach(updateDecorations);
+        if (isEnabled) {
+          vscode.window.visibleTextEditors.forEach(updateDecorations);
+        }
       }
     })
   );
@@ -365,14 +405,16 @@ export function activate(context: vscode.ExtensionContext) {
     console.log("Extension is ready to apply decorations.");
 
     // Initial decoration for the active editor
-    if (vscode.window.activeTextEditor) {
+    if (isEnabled && vscode.window.activeTextEditor) {
       updateDecorations(vscode.window.activeTextEditor);
     }
   });
 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor((editor) => {
-      updateDecorations(editor);
+      if (isEnabled) {
+        updateDecorations(editor);
+      }
     })
   );
 
@@ -380,6 +422,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((event) => {
       if (
+        isEnabled &&
         vscode.window.activeTextEditor &&
         event.document === vscode.window.activeTextEditor.document
       ) {

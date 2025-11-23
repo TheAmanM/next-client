@@ -26,6 +26,15 @@ This extension scans your workspace to build a module graph and identifies all c
 - Visual Studio Code version `1.101.0` or newer.
 - A Next.js project.
 
+## Commands
+
+This extension provides the following commands in the Command Palette (`Ctrl+Shift+P`):
+
+- `Next Client: Enable`: Enables the client component highlighting.
+- `Next Client: Disable`: Disables the client component highlighting.
+
+Only one command will be visible at a time, depending on the current state of the extension.
+
 ## Installation
 
 1.  Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=next-client).

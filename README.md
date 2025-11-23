@@ -1,6 +1,9 @@
 # Next Client
 
-[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/next-client.svg?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=next-client)
+![feature-gif](./demo.gif)
+
+[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/AmanMeherally.next-client.svg?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=AmanMeherally.next-client)
+[![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/AmanMeherally.next-client.svg?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=AmanMeherally.next-client)
 
 A free and open-source VS Code extension to help Next.js developers avoid security bugs by clearly highlighting all "use client" components and their usages.
 
@@ -16,10 +19,6 @@ This extension scans your workspace to build a module graph and identifies all c
 - **Highlights Client Component Usages**: When you use a client component in another file (server or client), the JSX tag for that component is highlighted.
 - **Automatic & Real-time**: The highlighting is applied automatically and updates as you type or change files.
 - **Customizable Styling**: You can customize the highlight colors to fit your theme.
-
-![feature-gif](https://raw.githubusercontent.com/your-repo/next-client/main/images/feature.gif)
-
-> (Note: You will need to create and add a feature GIF/image to showcase the extension)
 
 ## Requirements
 
@@ -37,7 +36,7 @@ Only one command will be visible at a time, depending on the current state of th
 
 ## Installation
 
-1.  Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=next-client).
+1.  Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AmanMeherally.next-client).
 2.  Reload VS Code.
 3.  The extension will automatically activate when you open a JavaScript or TypeScript file.
 
@@ -54,15 +53,7 @@ You can customize the appearance of the highlights by adding the following setti
 
 ## Known Issues
 
-There are no known issues at this time. If you find a bug, please [open an issue](https://github.com/your-repo/next-client/issues).
-
-## Release Notes
-
-### 0.0.1
-
-- Initial release of Next Client.
-
----
+There are no known issues at this time. If you find a bug, please [open an issue](https://github.com/TheAmanM/next-client/issues).
 
 ## Contributing
 

@@ -278,9 +278,9 @@ async function updateDecorations(editor: vscode.TextEditor | undefined) {
           }
         }
       },
-      JSXOpeningElement({ node }) {
-        if (node.name.type === "JSXIdentifier") {
-          const componentName = node.name.name;
+      JSXElement({ node }) {
+        if (node.openingElement.name.type === "JSXIdentifier") {
+          const componentName = node.openingElement.name.name;
           if (componentName[0] !== componentName[0].toLowerCase()) {
             jsxElements.push(node);
           }
@@ -289,7 +289,7 @@ async function updateDecorations(editor: vscode.TextEditor | undefined) {
     });
 
     for (const node of jsxElements) {
-      const componentName = node.name.name;
+      const componentName = node.openingElement.name.name;
       const importSource = importMap.get(componentName);
       if (importSource) {
         const absoluteImportPath = await resolveImportPath(
@@ -300,14 +300,26 @@ async function updateDecorations(editor: vscode.TextEditor | undefined) {
         if (absoluteImportPath) {
           const importedModuleInfo = moduleGraph.get(absoluteImportPath);
           if (importedModuleInfo && importedModuleInfo.isClient) {
-            console.log(
-              `Highlighting usage: <${componentName}> in ${currentFilePath}`
-            );
-            if (node.name.start != null && node.name.end != null) {
-              const start = editor.document.positionAt(node.name.start);
-              const end = editor.document.positionAt(node.name.end);
-              const range = new vscode.Range(start, end);
-              decorations.push({ range });
+            // Highlight opening tag
+            const openNode = node.openingElement.name;
+            if (openNode.start != null && openNode.end != null) {
+              console.log(
+                `Highlighting usage (open): <${componentName}> in ${currentFilePath}`
+              );
+              const start = editor.document.positionAt(openNode.start);
+              const end = editor.document.positionAt(openNode.end);
+              decorations.push({ range: new vscode.Range(start, end) });
+            }
+
+            // Highlight closing tag
+            const closeNode = node.closingElement?.name;
+            if (closeNode && closeNode.start != null && closeNode.end != null) {
+              console.log(
+                `Highlighting usage (close): </${componentName}> in ${currentFilePath}`
+              );
+              const start = editor.document.positionAt(closeNode.start);
+              const end = editor.document.positionAt(closeNode.end);
+              decorations.push({ range: new vscode.Range(start, end) });
             }
           }
         }

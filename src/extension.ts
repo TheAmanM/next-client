@@ -6,7 +6,8 @@ import traverse from "@babel/traverse";
 
 interface ModuleInfo {
   filePath: string;
-  isClient: boolean;
+  isClient: boolean; // The calculated status after propagation
+  hasUseClient: boolean; // True if the file explicitly contains "use client"
   imports: Set<string>; // A set of absolute paths to other modules it imports
 }
 
@@ -38,8 +39,70 @@ function refreshDecorationStyle() {
   });
 }
 
+async function processFile(
+  fileUri: vscode.Uri,
+  workspaceRoot: string,
+  fileContent?: string
+): Promise<ModuleInfo | null> {
+  const filePath = fileUri.fsPath;
+  try {
+    const content =
+      fileContent ?? (await fs.promises.readFile(filePath, "utf-8"));
+    const imports = new Set<string>();
+
+    const ast = parse(content, {
+      sourceType: "module",
+      plugins: ["jsx", "typescript"],
+      errorRecovery: true,
+    });
+
+    // Correctly check for the "use client" directive in the AST
+    const hasUseClient = ast.program.directives.some(
+      (d) => d.value.value === "use client"
+    );
+
+    if (hasUseClient) {
+      console.log(`Found "use client" directive in: ${filePath}`);
+    }
+
+    const importPromises: Promise<void>[] = [];
+    traverse(ast, {
+      ImportDeclaration({ node }) {
+        const promise = (async () => {
+          const importPath = await resolveImportPath(
+            node.source.value,
+            filePath,
+            workspaceRoot
+          );
+          if (importPath) {
+            imports.add(importPath);
+          }
+        })();
+        importPromises.push(promise);
+      },
+    });
+
+    await Promise.all(importPromises);
+
+    return {
+      filePath,
+      isClient: hasUseClient, // Initially, isClient is the same as hasUseClient
+      hasUseClient,
+      imports,
+    };
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      console.log(`File not found during processing, skipping: ${filePath}`);
+    } else {
+      console.error(`Failed to process ${filePath}:`, error);
+    }
+    return null;
+  }
+}
+
 async function scanWorkspace() {
   console.log("Starting workspace scan...");
+  moduleGraph.clear(); // Clear the graph for a full rescan
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders) {
     console.log("No workspace folders found.");
@@ -53,58 +116,18 @@ async function scanWorkspace() {
   );
   console.log(`Found ${allJsxFiles.length} files to scan.`);
 
-  for (const fileUri of allJsxFiles) {
-    const filePath = fileUri.fsPath;
-    try {
-      const fileContent = await fs.promises.readFile(filePath, "utf-8");
-      const isClient = fileContent.substring(0, 200).includes("use client");
-      if (isClient) {
-        console.log(`Found "use client" in: ${filePath}`);
-      }
-      const imports = new Set<string>();
+  const processPromises = allJsxFiles.map((fileUri) =>
+    processFile(fileUri, workspaceRoot)
+  );
 
-      const ast = parse(fileContent, {
-        sourceType: "module",
-        plugins: ["jsx", "typescript"],
-        errorRecovery: true,
-      });
+  const results = await Promise.all(processPromises);
 
-      const importPromises: Promise<void>[] = [];
-      traverse(ast, {
-        ImportDeclaration({ node }) {
-          const promise = (async () => {
-            const importPath = await resolveImportPath(
-              node.source.value,
-              filePath,
-              workspaceRoot
-            );
-            if (importPath) {
-              imports.add(importPath);
-            }
-          })();
-          importPromises.push(promise);
-        },
-      });
-
-      await Promise.all(importPromises);
-
-      moduleGraph.set(filePath, {
-        filePath,
-        isClient,
-        imports,
-      });
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "ENOENT"
-      ) {
-        console.log(`File not found, skipping: ${filePath}`);
-      } else {
-        console.error(`Failed to process ${filePath}:`, error);
-      }
+  for (const moduleInfo of results) {
+    if (moduleInfo) {
+      moduleGraph.set(moduleInfo.filePath, moduleInfo);
     }
   }
+
   console.log(`Module graph created with ${moduleGraph.size} modules.`);
 }
 
@@ -168,12 +191,16 @@ async function resolveFileExtension(
 
 function propagateClientStatus() {
   console.log("Starting client status propagation...");
+
+  // Reset state before propagation
   const queue: string[] = [];
-  for (const [filePath, moduleInfo] of moduleGraph.entries()) {
+  for (const moduleInfo of moduleGraph.values()) {
+    moduleInfo.isClient = moduleInfo.hasUseClient; // Reset to its explicit status
     if (moduleInfo.isClient) {
-      queue.push(filePath);
+      queue.push(moduleInfo.filePath);
     }
   }
+
   console.log(`Initial client components in queue: ${queue.length}`);
 
   let count = 0;
@@ -406,16 +433,18 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  const reprocessGraphAndUpdateDecorations = () => {
+    propagateClientStatus();
+    // Update decorations for all visible editors
+    vscode.window.visibleTextEditors.forEach(updateDecorations);
+    console.log("Graph reprocessed and decorations updated.");
+  };
+
   scanWorkspace().then(() => {
     console.log("Workspace scan complete.");
-    propagateClientStatus();
+    reprocessGraphAndUpdateDecorations();
     isReady = true;
     console.log("Extension is ready to apply decorations.");
-
-    // Initial decoration for the active editor
-    if (isEnabled && vscode.window.activeTextEditor) {
-      updateDecorations(vscode.window.activeTextEditor);
-    }
   });
 
   context.subscriptions.push(
@@ -429,18 +458,109 @@ export function activate(context: vscode.ExtensionContext) {
   let debounceTimer: NodeJS.Timeout;
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((event) => {
-      if (
-        isEnabled &&
-        vscode.window.activeTextEditor &&
-        event.document === vscode.window.activeTextEditor.document
-      ) {
+      if (!isEnabled || !vscode.workspace.workspaceFolders) {
+        return;
+      }
+      const activeEditor = vscode.window.activeTextEditor;
+      if (activeEditor && event.document === activeEditor.document) {
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          updateDecorations(vscode.window.activeTextEditor);
-        }, 300);
+        debounceTimer = setTimeout(async () => {
+          console.log(
+            `Text changed in buffer for ${event.document.uri.fsPath}, reprocessing...`
+          );
+          const workspaceRoot =
+            vscode.workspace.workspaceFolders![0].uri.fsPath;
+
+          // Get live content from the editor buffer
+          const liveContent = event.document.getText();
+          const moduleInfo = await processFile(
+            event.document.uri,
+            workspaceRoot,
+            liveContent
+          );
+
+          // Try to update the graph, but don't let it stop the decoration update
+          let graphWasUpdated = false;
+          if (moduleInfo) {
+            moduleGraph.set(moduleInfo.filePath, moduleInfo);
+            propagateClientStatus();
+            graphWasUpdated = true;
+            console.log("Module graph updated from buffer change.");
+          } else {
+            console.log(
+              "Could not update module graph, likely due to transient syntax error."
+            );
+          }
+
+          // Always update the current editor's decorations
+          updateDecorations(activeEditor);
+
+          // If the graph changed, update other visible editors too
+          if (graphWasUpdated) {
+            vscode.window.visibleTextEditors.forEach((editor) => {
+              if (editor !== activeEditor) {
+                updateDecorations(editor);
+              }
+            });
+          }
+        }, 200);
       }
     })
   );
+
+  // --- File System Watcher for external changes (e.g., git checkout) ---
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (workspaceFolders) {
+    const workspaceRoot = workspaceFolders[0].uri.fsPath;
+
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      "**/*.{js,jsx,ts,tsx}"
+    );
+    context.subscriptions.push(watcher);
+
+    // onDidChange is covered by onDidChangeTextDocument for open files,
+    // but this handles changes made outside of the editor (e.g. git pull)
+    watcher.onDidChange(async (uri) => {
+      // Only process if the file is not open and dirty, as onDidChangeTextDocument will handle it
+      const doc = vscode.workspace.textDocuments.find(
+        (d) => d.uri.fsPath === uri.fsPath
+      );
+      if (doc && doc.isDirty) {
+        return;
+      }
+
+      console.log(`File changed on disk: ${uri.fsPath}`);
+      const moduleInfo = await processFile(uri, workspaceRoot);
+      if (moduleInfo) {
+        moduleGraph.set(moduleInfo.filePath, moduleInfo);
+        reprocessGraphAndUpdateDecorations();
+      }
+    });
+
+    watcher.onDidCreate(async (uri) => {
+      console.log(`File created: ${uri.fsPath}`);
+      const moduleInfo = await processFile(uri, workspaceRoot);
+      if (moduleInfo) {
+        moduleGraph.set(moduleInfo.filePath, moduleInfo);
+        reprocessGraphAndUpdateDecorations();
+      }
+    });
+
+    watcher.onDidDelete((uri) => {
+      const filePath = uri.fsPath;
+      console.log(`File deleted: ${filePath}`);
+      if (moduleGraph.has(filePath)) {
+        moduleGraph.delete(filePath);
+        // Also remove it from any module that imports it
+        for (const moduleInfo of moduleGraph.values()) {
+          if (moduleInfo.imports.has(filePath)) {
+            moduleInfo.imports.delete(filePath);
+          }
+        }
+        reprocessGraphAndUpdateDecorations();
+      }
+    });
+  }
 }
 
 export function deactivate() {}

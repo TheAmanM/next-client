@@ -15,14 +15,7 @@ let isReady = false;
 
 const clientComponentDecorationType =
   vscode.window.createTextEditorDecorationType({
-    backgroundColor: "rgba(255, 0, 0, 0.2)",
-    border: "1px solid red",
-    light: {
-      color: "darkblue",
-    },
-    dark: {
-      color: "lightblue",
-    },
+    textDecoration: "underline wavy red",
   });
 
 async function scanWorkspace() {
@@ -39,6 +32,10 @@ async function scanWorkspace() {
     "**/node_modules/**"
   );
   console.log(`Found ${allJsxFiles.length} files to scan.`);
+
+  for (const fileUri of allJsxFiles) {
+    console.log(`Scanning file: ${fileUri.fsPath}`);
+  }
 
   for (const fileUri of allJsxFiles) {
     const filePath = fileUri.fsPath;
@@ -202,22 +199,23 @@ async function updateDecorations(editor: vscode.TextEditor | undefined) {
     return;
   }
   const currentFilePath = editor.document.uri.fsPath;
-  const moduleInfo = moduleGraph.get(currentFilePath);
   const decorations: vscode.DecorationOptions[] = [];
+  const fileContent = editor.document.getText();
+  const workspaceRoot = vscode.workspace.workspaceFolders![0].uri.fsPath;
 
-  // New logic: Only decorate if the current file is a client component
-  if (moduleInfo && moduleInfo.isClient) {
-    console.log(
-      `File ${currentFilePath} is a client component. Finding definitions to highlight.`
-    );
-    const fileContent = editor.document.getText();
-    try {
-      const ast = parse(fileContent, {
-        sourceType: "module",
-        plugins: ["jsx", "typescript"],
-        errorRecovery: true,
-      });
+  try {
+    const ast = parse(fileContent, {
+      sourceType: "module",
+      plugins: ["jsx", "typescript"],
+      errorRecovery: true,
+    });
 
+    // Part 1: Highlight definitions if current file is a client component
+    const moduleInfo = moduleGraph.get(currentFilePath);
+    if (moduleInfo && moduleInfo.isClient) {
+      console.log(
+        `File ${currentFilePath} is a client component. Finding definitions to highlight.`
+      );
       traverse(ast, {
         FunctionDeclaration({ node }) {
           if (node.id && node.id.name[0] === node.id.name[0].toUpperCase()) {
@@ -262,17 +260,64 @@ async function updateDecorations(editor: vscode.TextEditor | undefined) {
           }
         },
       });
-    } catch (e) {
-      console.error("Error parsing file for definitions", e);
     }
-  } else {
-    console.log(
-      `File ${currentFilePath} is not a client component. No decorations to apply.`
-    );
+
+    // Part 2: Highlight usages of imported client components
+    console.log(`Scanning ${currentFilePath} for usages of client components.`);
+    const importMap = new Map<string, string>();
+    const jsxElements: any[] = [];
+    traverse(ast, {
+      ImportDeclaration({ node }) {
+        for (const specifier of node.specifiers) {
+          if (
+            specifier.type === "ImportSpecifier" ||
+            specifier.type === "ImportDefaultSpecifier"
+          ) {
+            importMap.set(specifier.local.name, node.source.value);
+          }
+        }
+      },
+      JSXOpeningElement({ node }) {
+        if (node.name.type === "JSXIdentifier") {
+          const componentName = node.name.name;
+          if (componentName[0] !== componentName[0].toLowerCase()) {
+            jsxElements.push(node);
+          }
+        }
+      },
+    });
+
+    for (const node of jsxElements) {
+      const componentName = node.name.name;
+      const importSource = importMap.get(componentName);
+      if (importSource) {
+        const absoluteImportPath = await resolveImportPath(
+          importSource,
+          currentFilePath,
+          workspaceRoot
+        );
+        if (absoluteImportPath) {
+          const importedModuleInfo = moduleGraph.get(absoluteImportPath);
+          if (importedModuleInfo && importedModuleInfo.isClient) {
+            console.log(
+              `Highlighting usage: <${componentName}> in ${currentFilePath}`
+            );
+            if (node.name.start != null && node.name.end != null) {
+              const start = editor.document.positionAt(node.name.start);
+              const end = editor.document.positionAt(node.name.end);
+              const range = new vscode.Range(start, end);
+              decorations.push({ range });
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Error during decoration update", e);
   }
 
   console.log(
-    `Applying ${decorations.length} definition decorations to ${currentFilePath}.`
+    `Applying ${decorations.length} total decorations to ${currentFilePath}.`
   );
   editor.setDecorations(clientComponentDecorationType, decorations);
 }

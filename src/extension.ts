@@ -13,6 +13,7 @@ interface ModuleInfo {
 const moduleGraph = new Map<string, ModuleInfo>();
 const importerMap = new Map<string, Set<string>>(); // Maps a module to all modules that import it
 const clientModuleCache = new Map<string, boolean>(); // Cache for isClientModule checks
+const pathResolutionCache = new Map<string, string | null>(); // Cache for path resolutions
 
 let isReady = false;
 let isEnabled = true;
@@ -192,29 +193,39 @@ async function resolveImportPath(
 async function resolveFileExtension(
   absolutePath: string
 ): Promise<string | null> {
+  if (pathResolutionCache.has(absolutePath)) {
+    return pathResolutionCache.get(absolutePath)!;
+  }
+
   const extensions = ["", ".js", ".jsx", ".ts", ".tsx"];
+  // Check for file with extension
   for (const ext of extensions) {
     const pathWithExt = absolutePath + ext;
     try {
       const stats = await fs.promises.stat(pathWithExt);
       if (stats.isFile()) {
+        pathResolutionCache.set(absolutePath, pathWithExt);
         return pathWithExt;
       }
     } catch (e) {
       // ignore
     }
   }
+  // Check for index file in directory
   for (const ext of extensions) {
     const indexPath = path.join(absolutePath, "index" + ext);
     try {
       const stats = await fs.promises.stat(indexPath);
       if (stats.isFile()) {
+        pathResolutionCache.set(absolutePath, indexPath);
         return indexPath;
       }
     } catch (e) {
       // ignore
     }
   }
+
+  pathResolutionCache.set(absolutePath, null); // Cache the failure
   return null;
 }
 
@@ -497,6 +508,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     watcher.onDidCreate(async (uri) => {
+      pathResolutionCache.clear();
       const oldModuleInfo = moduleGraph.get(uri.fsPath);
       const newModuleInfo = await processFile(uri, workspaceRoot);
       if (newModuleInfo) {
@@ -507,6 +519,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     watcher.onDidDelete((uri) => {
+      pathResolutionCache.clear();
       const filePath = uri.fsPath;
       const deletedModuleInfo = moduleGraph.get(filePath);
       if (deletedModuleInfo) {

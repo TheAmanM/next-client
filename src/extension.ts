@@ -444,58 +444,47 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  scanWorkspace().then(() => {
-    reprocessAndDecorate();
-    isReady = true;
-    console.log("Extension is ready to apply decorations.");
-  });
-
-  context.subscriptions.push(
-    vscode.window.onDidChangeActiveTextEditor((editor) => {
-      if (isEnabled) {
-        updateDecorations(editor);
-      }
-    })
-  );
-
-  let debounceTimer: NodeJS.Timeout;
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeTextDocument((event) => {
-      if (!isEnabled || !vscode.workspace.workspaceFolders) return;
-      const activeEditor = vscode.window.activeTextEditor;
-      if (activeEditor && event.document === activeEditor.document) {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(async () => {
-          const filePath = event.document.uri.fsPath;
-          const workspaceRoot = vscode.workspace.workspaceFolders![0].uri.fsPath;
-
-          const oldModuleInfo = moduleGraph.get(filePath);
-          const newModuleInfo = await processFile(
-            event.document.uri,
-            workspaceRoot,
-            event.document.getText()
-          );
-
-          if (newModuleInfo) {
-            updateImporterMap(oldModuleInfo, newModuleInfo);
-            moduleGraph.set(filePath, newModuleInfo);
-            reprocessAndDecorate();
-          } else {
-            updateDecorations(activeEditor);
-          }
-        }, 400);
-      }
-    })
-  );
-
+  // --- Progressive Scan and Watcher Logic ---
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (workspaceFolders) {
     const workspaceRoot = workspaceFolders[0].uri.fsPath;
-    const watcher = vscode.workspace.createFileSystemWatcher("**/*.{js,jsx,ts,tsx}");
+
+    // 1. Quick Scan: Immediately process the active editor for instant feedback
+    console.log("Starting progressive scan...");
+    isReady = true; // Set ready immediately
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor) {
+      console.log(
+        `Performing quick scan for active file: ${activeEditor.document.uri.fsPath}`
+      );
+      processFile(activeEditor.document.uri, workspaceRoot).then(
+        (moduleInfo) => {
+          if (moduleInfo) {
+            moduleGraph.set(moduleInfo.filePath, moduleInfo);
+            updateDecorations(activeEditor);
+            console.log("Quick scan complete.");
+          }
+        }
+      );
+    }
+
+    // 2. Full Scan: Run the complete scan in the background
+    console.log("Starting full workspace scan in the background...");
+    scanWorkspace().then(() => {
+      console.log("Background workspace scan complete.");
+      reprocessAndDecorate();
+    });
+
+    // 3. File System Watcher
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      "**/*.{js,jsx,ts,tsx}"
+    );
     context.subscriptions.push(watcher);
 
     watcher.onDidChange(async (uri) => {
-      const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === uri.fsPath);
+      const doc = vscode.workspace.textDocuments.find(
+        (d) => d.uri.fsPath === uri.fsPath
+      );
       if (doc && doc.isDirty) return;
 
       const oldModuleInfo = moduleGraph.get(uri.fsPath);
@@ -530,7 +519,48 @@ export function activate(context: vscode.ExtensionContext) {
         reprocessAndDecorate();
       }
     });
+  } else {
+    isReady = true; // Set ready even if there's no folder
   }
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (isEnabled) {
+        updateDecorations(editor);
+      }
+    })
+  );
+
+  let debounceTimer: NodeJS.Timeout;
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      if (!isEnabled || !vscode.workspace.workspaceFolders) return;
+      const activeEditor = vscode.window.activeTextEditor;
+      if (activeEditor && event.document === activeEditor.document) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+          const filePath = event.document.uri.fsPath;
+          const workspaceRoot =
+            vscode.workspace.workspaceFolders![0].uri.fsPath;
+
+          const oldModuleInfo = moduleGraph.get(filePath);
+          const newModuleInfo = await processFile(
+            event.document.uri,
+            workspaceRoot,
+            event.document.getText()
+          );
+
+          if (newModuleInfo) {
+            updateImporterMap(oldModuleInfo, newModuleInfo);
+            moduleGraph.set(filePath, newModuleInfo);
+            reprocessAndDecorate();
+          } else {
+            updateDecorations(activeEditor);
+          }
+        }, 400);
+      }
+    })
+  );
 }
 
 export function deactivate() {}

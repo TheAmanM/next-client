@@ -13,15 +13,23 @@ interface ModuleInfo {
 const moduleGraph = new Map<string, ModuleInfo>();
 let isReady = false;
 
-const clientComponentDecorationType =
-  vscode.window.createTextEditorDecorationType({
-    backgroundColor: "rgba(255, 0, 0, 0.2)",
-    borderRadius: "2px",
-    color: "rgba(255, 0, 0, 0.9)",
+let clientComponentDecorationType: vscode.TextEditorDecorationType;
+
+function refreshDecorationStyle() {
+  if (clientComponentDecorationType) {
+    clientComponentDecorationType.dispose();
+  }
+
+  const config = vscode.workspace.getConfiguration("nextClient.styling");
+
+  clientComponentDecorationType = vscode.window.createTextEditorDecorationType({
+    backgroundColor: config.get<string>("backgroundColor"),
+    color: config.get<string>("color"),
     dark: {
-      color: "rgba(255, 100, 100, 0.9)",
+      color: config.get<string>("darkColor"),
     },
   });
+}
 
 async function scanWorkspace() {
   console.log("Starting workspace scan...");
@@ -337,6 +345,18 @@ async function updateDecorations(editor: vscode.TextEditor | undefined) {
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Congratulations, your extension "client-js" is now active!');
+
+  refreshDecorationStyle();
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("nextClient.styling")) {
+        console.log("Styling configuration changed. Re-applying decorations.");
+        refreshDecorationStyle();
+        vscode.window.visibleTextEditors.forEach(updateDecorations);
+      }
+    })
+  );
 
   scanWorkspace().then(() => {
     console.log("Workspace scan complete.");

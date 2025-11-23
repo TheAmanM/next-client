@@ -22,7 +22,27 @@
         "command": "next-client.helloWorld",
         "title": "Hello World"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Next Client Editor",
+      "properties": {
+        "nextClient.styling.backgroundColor": {
+          "type": "string",
+          "default": "rgba(255, 0, 0, 0.2)",
+          "description": "Background color for highlights. Use rgba() for transparency."
+        },
+        "nextClient.styling.color": {
+          "type": "string",
+          "default": "rgba(255, 0, 0, 0.9)",
+          "description": "Text color for highlights (primarily for light themes)."
+        },
+        "nextClient.styling.darkColor": {
+          "type": "string",
+          "default": "rgba(255, 100, 100, 0.9)",
+          "description": "Text color for highlights on dark themes."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

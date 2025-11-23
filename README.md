@@ -1,71 +1,66 @@
-# next-client README
+# Next Client
 
-This is the README for your extension "next-client". After writing up a brief description, we recommend including the following sections.
+[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/next-client.svg?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=next-client)
+
+A free and open-source VS Code extension to help Next.js developers avoid security bugs by clearly highlighting all "use client" components and their usages.
+
+## The Problem
+
+In Next.js, passing data from server components to client components can inadvertently lead to security vulnerabilities if not handled carefully. It's easy to lose track of which components are client-side, especially in larger projects. This extension helps you stay aware of the client/server boundary.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+This extension scans your workspace to build a module graph and identifies all components that are client-side, either directly (with a `"use client";` directive) or indirectly (by importing a client component).
 
-For example if there is an image subfolder under your extension project workspace:
+- **Highlights Client Component Definitions**: If a file is determined to be a client component, all React component definitions within that file are highlighted.
+- **Highlights Client Component Usages**: When you use a client component in another file (server or client), the JSX tag for that component is highlighted.
+- **Automatic & Real-time**: The highlighting is applied automatically and updates as you type or change files.
+- **Customizable Styling**: You can customize the highlight colors to fit your theme.
 
-\!\[feature X\]\(images/feature-x.png\)
+![feature-gif](https://raw.githubusercontent.com/your-repo/next-client/main/images/feature.gif)
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+> (Note: You will need to create and add a feature GIF/image to showcase the extension)
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- Visual Studio Code version `1.101.0` or newer.
+- A Next.js project.
+
+## Installation
+
+1.  Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=next-client).
+2.  Reload VS Code.
+3.  The extension will automatically activate when you open a JavaScript or TypeScript file.
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+You can customize the appearance of the highlights by adding the following settings to your `settings.json` file:
 
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+- `nextClient.styling.backgroundColor`: The background color for the highlight. It's best to use an `rgba()` value for transparency.
+  - _Default_: `"rgba(255, 0, 0, 0.2)"`
+- `nextClient.styling.color`: The text color for the highlight, which is more prominent in light themes.
+  - _Default_: `"rgba(255, 0, 0, 0.9)"`
+- `nextClient.styling.darkColor`: The text color for the highlight on dark themes.
+  - _Default_: `"rgba(255, 100, 100, 0.9)"`
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+There are no known issues at this time. If you find a bug, please [open an issue](https://github.com/your-repo/next-client/issues).
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.1
 
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+- Initial release of Next Client.
 
 ---
 
-## Following extension guidelines
+## Contributing
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+Contributions are welcome! Please feel free to open an issue or submit a pull request.
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+## License
 
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+This extension is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 **Enjoy!**

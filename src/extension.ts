@@ -29,13 +29,9 @@ async function scanWorkspace() {
 
   const allJsxFiles = await vscode.workspace.findFiles(
     "**/*.{js,jsx,ts,tsx}",
-    "**/node_modules/**"
+    "{**/node_modules/**,**/.next/**}"
   );
   console.log(`Found ${allJsxFiles.length} files to scan.`);
-
-  for (const fileUri of allJsxFiles) {
-    console.log(`Scanning file: ${fileUri.fsPath}`);
-  }
 
   for (const fileUri of allJsxFiles) {
     const filePath = fileUri.fsPath;

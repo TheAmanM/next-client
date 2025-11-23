@@ -15,7 +15,12 @@ let isReady = false;
 
 const clientComponentDecorationType =
   vscode.window.createTextEditorDecorationType({
-    textDecoration: "underline wavy red",
+    backgroundColor: "rgba(255, 0, 0, 0.2)",
+    borderRadius: "2px",
+    color: "rgba(255, 0, 0, 0.9)",
+    dark: {
+      color: "rgba(255, 100, 100, 0.9)",
+    },
   });
 
 async function scanWorkspace() {

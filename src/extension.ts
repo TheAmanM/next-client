@@ -6,12 +6,14 @@ import traverse from "@babel/traverse";
 
 interface ModuleInfo {
   filePath: string;
-  isClient: boolean; // The calculated status after propagation
   hasUseClient: boolean; // True if the file explicitly contains "use client"
   imports: Set<string>; // A set of absolute paths to other modules it imports
 }
 
 const moduleGraph = new Map<string, ModuleInfo>();
+const importerMap = new Map<string, Set<string>>(); // Maps a module to all modules that import it
+const clientModuleCache = new Map<string, boolean>(); // Cache for isClientModule checks
+
 let isReady = false;
 let isEnabled = true;
 
@@ -39,6 +41,29 @@ function refreshDecorationStyle() {
   });
 }
 
+function updateImporterMap(
+  oldModuleInfo: ModuleInfo | undefined,
+  newModuleInfo: ModuleInfo
+) {
+  const filePath = newModuleInfo.filePath;
+  const oldImports = oldModuleInfo?.imports ?? new Set();
+  const newImports = newModuleInfo.imports;
+
+  for (const oldImport of oldImports) {
+    if (!newImports.has(oldImport)) {
+      importerMap.get(oldImport)?.delete(filePath);
+    }
+  }
+  for (const newImport of newImports) {
+    if (!oldImports.has(newImport)) {
+      if (!importerMap.has(newImport)) {
+        importerMap.set(newImport, new Set());
+      }
+      importerMap.get(newImport)!.add(filePath);
+    }
+  }
+}
+
 async function processFile(
   fileUri: vscode.Uri,
   workspaceRoot: string,
@@ -56,7 +81,6 @@ async function processFile(
       errorRecovery: true,
     });
 
-    // Correctly check for the "use client" directive in the AST
     const hasUseClient = ast.program.directives.some(
       (d) => d.value.value === "use client"
     );
@@ -86,7 +110,6 @@ async function processFile(
 
     return {
       filePath,
-      isClient: hasUseClient, // Initially, isClient is the same as hasUseClient
       hasUseClient,
       imports,
     };
@@ -102,7 +125,8 @@ async function processFile(
 
 async function scanWorkspace() {
   console.log("Starting workspace scan...");
-  moduleGraph.clear(); // Clear the graph for a full rescan
+  moduleGraph.clear();
+  importerMap.clear();
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders) {
     console.log("No workspace folders found.");
@@ -125,10 +149,18 @@ async function scanWorkspace() {
   for (const moduleInfo of results) {
     if (moduleInfo) {
       moduleGraph.set(moduleInfo.filePath, moduleInfo);
+      for (const importedPath of moduleInfo.imports) {
+        if (!importerMap.has(importedPath)) {
+          importerMap.set(importedPath, new Set());
+        }
+        importerMap.get(importedPath)!.add(moduleInfo.filePath);
+      }
     }
   }
 
-  console.log(`Module graph created with ${moduleGraph.size} modules.`);
+  console.log(
+    `Module graph created with ${moduleGraph.size} modules and importer map with ${importerMap.size} entries.`
+  );
 }
 
 async function resolveImportPath(
@@ -145,7 +177,6 @@ async function resolveImportPath(
       return await resolveFileExtension(absolutePath);
     }
     if (importSource.startsWith("@/")) {
-      // A real implementation would read tsconfig.json for path aliases.
       const absolutePath = path.resolve(
         workspaceRoot,
         importSource.substring(2)
@@ -162,7 +193,6 @@ async function resolveFileExtension(
   absolutePath: string
 ): Promise<string | null> {
   const extensions = ["", ".js", ".jsx", ".ts", ".tsx"];
-  // Check for file with extension
   for (const ext of extensions) {
     const pathWithExt = absolutePath + ext;
     try {
@@ -174,7 +204,6 @@ async function resolveFileExtension(
       // ignore
     }
   }
-  // Check for index file in directory
   for (const ext of extensions) {
     const indexPath = path.join(absolutePath, "index" + ext);
     try {
@@ -189,52 +218,52 @@ async function resolveFileExtension(
   return null;
 }
 
-function propagateClientStatus() {
-  console.log("Starting client status propagation...");
+function isSpecialNextJsFile(filePath: string): boolean {
+  const basename = path.basename(filePath);
+  const specialPrefixes = ["page.", "layout.", "template.", "error.", "loading."];
+  return specialPrefixes.some((prefix) => basename.startsWith(prefix));
+}
 
-  // Reset state before propagation
-  const queue: string[] = [];
-  for (const moduleInfo of moduleGraph.values()) {
-    moduleInfo.isClient = moduleInfo.hasUseClient; // Reset to its explicit status
-    if (moduleInfo.isClient) {
-      queue.push(moduleInfo.filePath);
-    }
+function isClientModule(
+  filePath: string,
+  visited: Set<string> = new Set()
+): boolean {
+  if (clientModuleCache.has(filePath)) {
+    return clientModuleCache.get(filePath)!;
+  }
+  if (visited.has(filePath)) {
+    return false; // Cycle detected
+  }
+  visited.add(filePath);
+
+  const moduleInfo = moduleGraph.get(filePath);
+  if (!moduleInfo) {
+    return false;
   }
 
-  console.log(`Initial client components in queue: ${queue.length}`);
+  if (moduleInfo.hasUseClient) {
+    clientModuleCache.set(filePath, true);
+    return true;
+  }
 
-  let count = 0;
-  const MAX_ITERATIONS = 10000; // Safeguard against infinite loops
+  // Stop upward traversal at special Next.js files
+  if (isSpecialNextJsFile(filePath)) {
+    clientModuleCache.set(filePath, false);
+    return false;
+  }
 
-  while (queue.length > 0 && count < MAX_ITERATIONS) {
-    count++;
-    const clientModulePath = queue.shift();
-    if (!clientModulePath) {
-      continue;
-    }
-
-    const moduleInfo = moduleGraph.get(clientModulePath);
-    if (!moduleInfo) {
-      continue;
-    }
-
-    for (const importedModulePath of moduleInfo.imports) {
-      const importedModuleInfo = moduleGraph.get(importedModulePath);
-      if (importedModuleInfo && !importedModuleInfo.isClient) {
-        console.log(
-          `Propagating client status to: ${importedModuleInfo.filePath}`
-        );
-        importedModuleInfo.isClient = true;
-        queue.push(importedModulePath);
+  const importers = importerMap.get(filePath);
+  if (importers) {
+    for (const importerPath of importers) {
+      if (isClientModule(importerPath, visited)) {
+        clientModuleCache.set(filePath, true);
+        return true;
       }
     }
   }
-  const finalClientCount = Array.from(moduleGraph.values()).filter(
-    (m) => m.isClient
-  ).length;
-  console.log(
-    `Client status propagation complete. Total client components: ${finalClientCount}`
-  );
+
+  clientModuleCache.set(filePath, false);
+  return false;
 }
 
 async function updateDecorations(editor: vscode.TextEditor | undefined) {
@@ -259,21 +288,19 @@ async function updateDecorations(editor: vscode.TextEditor | undefined) {
       errorRecovery: true,
     });
 
-    // Part 1: Highlight definitions if current file is a client component
     const moduleInfo = moduleGraph.get(currentFilePath);
-    if (moduleInfo && moduleInfo.isClient) {
-      console.log(
-        `File ${currentFilePath} is a client component. Finding definitions to highlight.`
-      );
+    const currentFileHasUseClient = moduleInfo?.hasUseClient ?? false;
+    const currentFileIsClientByContext = isClientModule(currentFilePath);
+
+    // Part 1: Highlight definitions only if the file has the "use client" directive
+    if (currentFileHasUseClient) {
       traverse(ast, {
         FunctionDeclaration({ node }) {
           if (node.id && node.id.name[0] === node.id.name[0].toUpperCase()) {
             if (node.id.start != null && node.id.end != null) {
               const start = editor.document.positionAt(node.id.start);
               const end = editor.document.positionAt(node.id.end);
-              const range = new vscode.Range(start, end);
-              decorations.push({ range });
-              console.log(`Highlighting definition: ${node.id.name}`);
+              decorations.push({ range: new vscode.Range(start, end) });
             }
           }
         },
@@ -290,29 +317,15 @@ async function updateDecorations(editor: vscode.TextEditor | undefined) {
               if (node.id.start != null && node.id.end != null) {
                 const start = editor.document.positionAt(node.id.start);
                 const end = editor.document.positionAt(node.id.end);
-                const range = new vscode.Range(start, end);
-                decorations.push({ range });
-                console.log(`Highlighting definition: ${node.id.name}`);
+                decorations.push({ range: new vscode.Range(start, end) });
               }
-            }
-          }
-        },
-        ClassDeclaration({ node }) {
-          if (node.id && node.id.name[0] === node.id.name[0].toUpperCase()) {
-            if (node.id.start != null && node.id.end != null) {
-              const start = editor.document.positionAt(node.id.start);
-              const end = editor.document.positionAt(node.id.end);
-              const range = new vscode.Range(start, end);
-              decorations.push({ range });
-              console.log(`Highlighting definition: ${node.id.name}`);
             }
           }
         },
       });
     }
 
-    // Part 2: Highlight usages of imported client components
-    console.log(`Scanning ${currentFilePath} for usages of client components.`);
+    // Part 2: Highlight usages of components that are client components in this context
     const importMap = new Map<string, string>();
     const jsxElements: any[] = [];
     traverse(ast, {
@@ -347,24 +360,18 @@ async function updateDecorations(editor: vscode.TextEditor | undefined) {
         );
         if (absoluteImportPath) {
           const importedModuleInfo = moduleGraph.get(absoluteImportPath);
-          if (importedModuleInfo && importedModuleInfo.isClient) {
-            // Highlight opening tag
+          // Highlight a usage if:
+          // 1. The current file is a client component (by context).
+          // 2. OR the imported component ITSELF has the "use client" directive.
+          if (currentFileIsClientByContext || importedModuleInfo?.hasUseClient) {
             const openNode = node.openingElement.name;
             if (openNode.start != null && openNode.end != null) {
-              console.log(
-                `Highlighting usage (open): <${componentName}> in ${currentFilePath}`
-              );
               const start = editor.document.positionAt(openNode.start);
               const end = editor.document.positionAt(openNode.end);
               decorations.push({ range: new vscode.Range(start, end) });
             }
-
-            // Highlight closing tag
             const closeNode = node.closingElement?.name;
             if (closeNode && closeNode.start != null && closeNode.end != null) {
-              console.log(
-                `Highlighting usage (close): </${componentName}> in ${currentFilePath}`
-              );
               const start = editor.document.positionAt(closeNode.start);
               const end = editor.document.positionAt(closeNode.end);
               decorations.push({ range: new vscode.Range(start, end) });
@@ -377,30 +384,27 @@ async function updateDecorations(editor: vscode.TextEditor | undefined) {
     console.error("Error during decoration update", e);
   }
 
-  console.log(
-    `Applying ${decorations.length} total decorations to ${currentFilePath}.`
-  );
   editor.setDecorations(clientComponentDecorationType, decorations);
 }
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Congratulations, your extension "client-js" is now active!');
 
-  // Load the persisted state, defaulting to true (enabled)
   isEnabled = context.globalState.get<boolean>("nextClient.isEnabled", true);
-
   vscode.commands.executeCommand("setContext", "nextClient.enabled", isEnabled);
+
+  const reprocessAndDecorate = () => {
+    clientModuleCache.clear();
+    console.log("Client module cache cleared.");
+    vscode.window.visibleTextEditors.forEach(updateDecorations);
+  };
 
   context.subscriptions.push(
     vscode.commands.registerCommand("next-client.enable", () => {
       isEnabled = true;
       context.globalState.update("nextClient.isEnabled", isEnabled);
-      vscode.commands.executeCommand(
-        "setContext",
-        "nextClient.enabled",
-        isEnabled
-      );
-      vscode.window.visibleTextEditors.forEach(updateDecorations);
+      vscode.commands.executeCommand("setContext", "nextClient.enabled", true);
+      reprocessAndDecorate();
       console.log("Next Client extension enabled.");
     })
   );
@@ -409,11 +413,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("next-client.disable", () => {
       isEnabled = false;
       context.globalState.update("nextClient.isEnabled", isEnabled);
-      vscode.commands.executeCommand(
-        "setContext",
-        "nextClient.enabled",
-        isEnabled
-      );
+      vscode.commands.executeCommand("setContext", "nextClient.enabled", false);
       clearAllDecorations();
       console.log("Next Client extension disabled.");
     })
@@ -433,16 +433,8 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  const reprocessGraphAndUpdateDecorations = () => {
-    propagateClientStatus();
-    // Update decorations for all visible editors
-    vscode.window.visibleTextEditors.forEach(updateDecorations);
-    console.log("Graph reprocessed and decorations updated.");
-  };
-
   scanWorkspace().then(() => {
-    console.log("Workspace scan complete.");
-    reprocessGraphAndUpdateDecorations();
+    reprocessAndDecorate();
     isReady = true;
     console.log("Extension is ready to apply decorations.");
   });
@@ -458,106 +450,71 @@ export function activate(context: vscode.ExtensionContext) {
   let debounceTimer: NodeJS.Timeout;
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((event) => {
-      if (!isEnabled || !vscode.workspace.workspaceFolders) {
-        return;
-      }
+      if (!isEnabled || !vscode.workspace.workspaceFolders) return;
       const activeEditor = vscode.window.activeTextEditor;
       if (activeEditor && event.document === activeEditor.document) {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(async () => {
-          console.log(
-            `Text changed in buffer for ${event.document.uri.fsPath}, reprocessing...`
-          );
-          const workspaceRoot =
-            vscode.workspace.workspaceFolders![0].uri.fsPath;
+          const filePath = event.document.uri.fsPath;
+          const workspaceRoot = vscode.workspace.workspaceFolders![0].uri.fsPath;
 
-          // Get live content from the editor buffer
-          const liveContent = event.document.getText();
-          const moduleInfo = await processFile(
+          const oldModuleInfo = moduleGraph.get(filePath);
+          const newModuleInfo = await processFile(
             event.document.uri,
             workspaceRoot,
-            liveContent
+            event.document.getText()
           );
 
-          // Try to update the graph, but don't let it stop the decoration update
-          let graphWasUpdated = false;
-          if (moduleInfo) {
-            moduleGraph.set(moduleInfo.filePath, moduleInfo);
-            propagateClientStatus();
-            graphWasUpdated = true;
-            console.log("Module graph updated from buffer change.");
+          if (newModuleInfo) {
+            updateImporterMap(oldModuleInfo, newModuleInfo);
+            moduleGraph.set(filePath, newModuleInfo);
+            reprocessAndDecorate();
           } else {
-            console.log(
-              "Could not update module graph, likely due to transient syntax error."
-            );
+            updateDecorations(activeEditor);
           }
-
-          // Always update the current editor's decorations
-          updateDecorations(activeEditor);
-
-          // If the graph changed, update other visible editors too
-          if (graphWasUpdated) {
-            vscode.window.visibleTextEditors.forEach((editor) => {
-              if (editor !== activeEditor) {
-                updateDecorations(editor);
-              }
-            });
-          }
-        }, 200);
+        }, 400);
       }
     })
   );
 
-  // --- File System Watcher for external changes (e.g., git checkout) ---
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (workspaceFolders) {
     const workspaceRoot = workspaceFolders[0].uri.fsPath;
-
-    const watcher = vscode.workspace.createFileSystemWatcher(
-      "**/*.{js,jsx,ts,tsx}"
-    );
+    const watcher = vscode.workspace.createFileSystemWatcher("**/*.{js,jsx,ts,tsx}");
     context.subscriptions.push(watcher);
 
-    // onDidChange is covered by onDidChangeTextDocument for open files,
-    // but this handles changes made outside of the editor (e.g. git pull)
     watcher.onDidChange(async (uri) => {
-      // Only process if the file is not open and dirty, as onDidChangeTextDocument will handle it
-      const doc = vscode.workspace.textDocuments.find(
-        (d) => d.uri.fsPath === uri.fsPath
-      );
-      if (doc && doc.isDirty) {
-        return;
-      }
+      const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === uri.fsPath);
+      if (doc && doc.isDirty) return;
 
-      console.log(`File changed on disk: ${uri.fsPath}`);
-      const moduleInfo = await processFile(uri, workspaceRoot);
-      if (moduleInfo) {
-        moduleGraph.set(moduleInfo.filePath, moduleInfo);
-        reprocessGraphAndUpdateDecorations();
+      const oldModuleInfo = moduleGraph.get(uri.fsPath);
+      const newModuleInfo = await processFile(uri, workspaceRoot);
+      if (newModuleInfo) {
+        updateImporterMap(oldModuleInfo, newModuleInfo);
+        moduleGraph.set(uri.fsPath, newModuleInfo);
+        reprocessAndDecorate();
       }
     });
 
     watcher.onDidCreate(async (uri) => {
-      console.log(`File created: ${uri.fsPath}`);
-      const moduleInfo = await processFile(uri, workspaceRoot);
-      if (moduleInfo) {
-        moduleGraph.set(moduleInfo.filePath, moduleInfo);
-        reprocessGraphAndUpdateDecorations();
+      const oldModuleInfo = moduleGraph.get(uri.fsPath);
+      const newModuleInfo = await processFile(uri, workspaceRoot);
+      if (newModuleInfo) {
+        updateImporterMap(oldModuleInfo, newModuleInfo);
+        moduleGraph.set(uri.fsPath, newModuleInfo);
+        reprocessAndDecorate();
       }
     });
 
     watcher.onDidDelete((uri) => {
       const filePath = uri.fsPath;
-      console.log(`File deleted: ${filePath}`);
-      if (moduleGraph.has(filePath)) {
-        moduleGraph.delete(filePath);
-        // Also remove it from any module that imports it
-        for (const moduleInfo of moduleGraph.values()) {
-          if (moduleInfo.imports.has(filePath)) {
-            moduleInfo.imports.delete(filePath);
-          }
+      const deletedModuleInfo = moduleGraph.get(filePath);
+      if (deletedModuleInfo) {
+        for (const importedPath of deletedModuleInfo.imports) {
+          importerMap.get(importedPath)?.delete(filePath);
         }
-        reprocessGraphAndUpdateDecorations();
+        moduleGraph.delete(filePath);
+        reprocessAndDecorate();
       }
     });
   }

@@ -1,9 +1,8 @@
 # Next Client
 
-![Next Client Cover Image](https://raw.githubusercontent.com/TheAmanM/next-client/refs/heads/main/cover.png)
+<!-- ![Next Client Cover Image](https://raw.githubusercontent.com/TheAmanM/next-client/refs/heads/main/cover.png) -->
 
-[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/AmanMeherally.next-client.svg?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=AmanMeherally.next-client)
-[![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/AmanMeherally.next-client.svg?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=AmanMeherally.next-client)
+<img src="https://raw.githubusercontent.com/TheAmanM/next-client/refs/heads/main/cover.png" style="border-radius: 16px">
 
 A free and open-source VS Code extension to help Next.js developers avoid security bugs by clearly highlighting all "use client" components and their usages.
 

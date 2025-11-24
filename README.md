@@ -1,6 +1,6 @@
 # Next Client
 
-![Next Client Cover Image](https://raw.githubusercontent.com/TheAmanM/next-client/main/cover.png)
+![Next Client Cover Image](https://raw.githubusercontent.com/TheAmanM/next-client/refs/heads/main/cover.png)
 
 [![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/AmanMeherally.next-client.svg?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=AmanMeherally.next-client)
 [![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/AmanMeherally.next-client.svg?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=AmanMeherally.next-client)
@@ -22,7 +22,7 @@ This extension scans your workspace to build a module graph and identifies all c
 
 ## Demo
 
-![Demo Video](https://raw.githubusercontent.com/TheAmanM/next-client/main/demo.mp4)
+![Demo Video](https://github.com/TheAmanM/next-client/raw/refs/heads/main/demo.mov)
 
 ## Requirements
 

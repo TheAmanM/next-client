@@ -1,6 +1,6 @@
 # Next Client
 
-![feature-gif](https://raw.githubusercontent.com/TheAmanM/next-client/main/demo.gif)
+![feature-gif](https://raw.githubusercontent.com/TheAmanM/next-client/main/demo.webm)
 
 [![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/AmanMeherally.next-client.svg?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=AmanMeherally.next-client)
 [![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/AmanMeherally.next-client.svg?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=AmanMeherally.next-client)

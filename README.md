@@ -1,6 +1,6 @@
 # Next Client
 
-![feature-gif](https://raw.githubusercontent.com/TheAmanM/next-client/main/demo.webm)
+![Next Client Cover Image](https://raw.githubusercontent.com/TheAmanM/next-client/main/cover.png)
 
 [![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/AmanMeherally.next-client.svg?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=AmanMeherally.next-client)
 [![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/AmanMeherally.next-client.svg?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=AmanMeherally.next-client)
@@ -19,6 +19,10 @@ This extension scans your workspace to build a module graph and identifies all c
 - **Highlights Client Component Usages**: When you use a client component in another file (server or client), the JSX tag for that component is highlighted.
 - **Automatic & Real-time**: The highlighting is applied automatically and updates as you type or change files.
 - **Customizable Styling**: You can customize the highlight colors to fit your theme.
+
+## Demo
+
+![Demo Video](https://raw.githubusercontent.com/TheAmanM/next-client/main/demo.mp4)
 
 ## Requirements
 

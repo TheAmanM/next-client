@@ -22,7 +22,7 @@ This extension scans your workspace to build a module graph and identifies all c
 
 ## Demo
 
-![Demo Video](https://github.com/TheAmanM/next-client/raw/refs/heads/main/demo.mov)
+![Demo Video](https://raw.githubusercontent.com/TheAmanM/next-client/refs/heads/main/demo.gif)
 
 ## Requirements
 
@@ -57,7 +57,8 @@ You can customize the appearance of the highlights by adding the following setti
 
 ## Known Issues
 
-There are no known issues at this time. If you find a bug, please [open an issue](https://github.com/TheAmanM/next-client/issues).
+There are no known issues at this time. If you find a bug, please [open an issue](https://github.com/**TheAmanM/next-client/issues).
+\*\*
 
 ## Contributing
 
